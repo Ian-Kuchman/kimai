@@ -208,9 +208,9 @@ class KimaiClient:
 # Status mapping: Notion → Kimai visible flag                         #
 # ------------------------------------------------------------------ #
 
-# Adjust these values once Ian confirms the exact Notion status option names.
-# Any status not listed here is treated as active (visible=True).
-INACTIVE_STATUSES = {"Complete", "Cancelled", "On Hold", "Archived"}
+# Confirmed from live Notion Projects DB schema.
+# Any status not in this set is treated as active (visible=True).
+INACTIVE_STATUSES = {"Done", "Canceled"}
 
 
 def status_to_visible(notion_status: str | None) -> bool:

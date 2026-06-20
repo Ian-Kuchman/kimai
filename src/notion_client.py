@@ -79,40 +79,31 @@ class NotionClient:
             clients.append({"notion_id": p["id"], "name": name})
         return clients
 
+    def _status(self, props: dict, key: str) -> str | None:
+        """Read a Notion status property (different type from select)."""
+        s = props.get(key, {}).get("status")
+        return s.get("name") if s else None
+
     def get_projects(self, database_id: str) -> list[dict]:
         """
         Returns list of dicts:
           {notion_id, name, client_notion_ids, start_date, end_date, status}
+
+        Confirmed property names (from live Notion schema):
+          title        → "Project Name"
+          client rel   → "🌆 Client"
+          date range   → "Date" (start + end)
+          status       → "Status" (status type, not select)
         """
         pages = self._query_database(database_id)
         projects = []
         for p in pages:
             props = p["properties"]
-            name = ""
-            for v in props.values():
-                if v.get("type") == "title":
-                    name = "".join(t.get("plain_text", "") for t in v["title"]).strip()
-                    break
-            # Relation to Clients — property name to be confirmed; try common names
-            client_ids = (
-                self._relation_ids(props, "Client")
-                or self._relation_ids(props, "Clients")
-                or self._relation_ids(props, "client")
-            )
-            start_date = (
-                self._date(props, "Start Date")
-                or self._date(props, "Start date")
-                or self._date(props, "Start")
-            )
-            end_date = (
-                self._date(props, "End Date")
-                or self._date(props, "End date")
-                or self._date(props, "End")
-            )
-            status = (
-                self._select(props, "Status")
-                or self._select(props, "status")
-            )
+            name = self._title(props, "Project Name")
+            client_ids = self._relation_ids(props, "🌆 Client")
+            start_date = self._date(props, "Date", "start")
+            end_date = self._date(props, "Date", "end")
+            status = self._status(props, "Status")
             projects.append(
                 {
                     "notion_id": p["id"],
@@ -129,22 +120,18 @@ class NotionClient:
         """
         Returns list of dicts:
           {notion_id, name, project_notion_ids}
-        Status is intentionally omitted — all tasks sync regardless.
+        Status is intentionally omitted — all milestones sync regardless.
+
+        Confirmed property names (from live Notion schema, Milestones DB):
+          title       → "Task name"
+          project rel → "Projects"
         """
         pages = self._query_database(database_id)
         tasks = []
         for p in pages:
             props = p["properties"]
-            name = ""
-            for v in props.values():
-                if v.get("type") == "title":
-                    name = "".join(t.get("plain_text", "") for t in v["title"]).strip()
-                    break
-            project_ids = (
-                self._relation_ids(props, "Project")
-                or self._relation_ids(props, "Projects")
-                or self._relation_ids(props, "project")
-            )
+            name = self._title(props, "Task name")
+            project_ids = self._relation_ids(props, "Projects")
             tasks.append(
                 {
                     "notion_id": p["id"],
