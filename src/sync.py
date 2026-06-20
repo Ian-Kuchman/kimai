@@ -183,7 +183,7 @@ def sync_tasks(
             skipped += 1
             continue
 
-        existing = kimai.find_activity_by_notion_id(notion_id, project_id=project_id)
+        existing = kimai.find_activity_by_notion_id(notion_id)
         if existing:
             kimai_id = existing["id"]
             needs_update = (
@@ -226,6 +226,7 @@ def main() -> None:
 
     notion = NotionClient()
     kimai = KimaiClient()
+    kimai.load_all()
 
     clients_db_id = os.environ["NOTION_CLIENTS_DB_ID"]
     projects_db_id = os.environ["NOTION_PROJECTS_DB_ID"]

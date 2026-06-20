@@ -7,6 +7,8 @@ import requests
 # Delimiter used when embedding the Notion Page ID in Kimai's comment field.
 # Format: "...any human comment... [notion:PAGE-ID]"
 NOTION_ID_TAG = "[notion:{id}]"
+NOTION_ID_PREFIX = "[notion:"
+NOTION_ID_SUFFIX = "]"
 
 # Characters Kimai forbids in name fields
 _NAME_FORBIDDEN = str.maketrans({c: "" for c in '<>\\\"='})
@@ -14,14 +16,12 @@ _NAME_FORBIDDEN = str.maketrans({c: "" for c in '<>\\\"='})
 
 def _safe_name(name: str) -> str:
     return name.translate(_NAME_FORBIDDEN).strip()
-NOTION_ID_PREFIX = "[notion:"
-NOTION_ID_SUFFIX = "]"
 
 
 def _embed_notion_id(comment: str | None, notion_id: str) -> str:
     base = (comment or "").strip()
     tag = NOTION_ID_TAG.format(id=notion_id)
-    if tag in (base or ""):
+    if tag in base:
         return base
     return f"{base} {tag}".strip()
 
@@ -49,6 +49,10 @@ class KimaiClient:
                 "Content-Type": "application/json",
             }
         )
+        # Caches — populated once by load_all(), used for all lookups thereafter
+        self._customers: list[dict] = []
+        self._projects: list[dict] = []
+        self._activities: list[dict] = []
 
     def _url(self, path: str) -> str:
         return f"{self.base_url}/api/{path.lstrip('/')}"
@@ -70,15 +74,25 @@ class KimaiClient:
             page += 1
         return results
 
+    def load_all(self) -> None:
+        """Fetch all existing Kimai data once upfront. All lookups use these caches."""
+        import logging
+        log = logging.getLogger(__name__)
+        log.info("Loading existing Kimai data...")
+        self._customers = self._get_all("customers")
+        self._projects = self._get_all("projects")
+        self._activities = self._get_all("activities")
+        log.info(
+            "Loaded %d customers, %d projects, %d activities from Kimai",
+            len(self._customers), len(self._projects), len(self._activities),
+        )
+
     # ------------------------------------------------------------------ #
     # Customer (= Notion Client)                                           #
     # ------------------------------------------------------------------ #
 
-    def get_customers(self) -> list[dict]:
-        return self._get_all("customers")
-
     def find_customer_by_notion_id(self, notion_id: str) -> dict | None:
-        for c in self.get_customers():
+        for c in self._customers:
             if _extract_notion_id(c.get("comment")) == notion_id:
                 return c
         return None
@@ -95,7 +109,9 @@ class KimaiClient:
         resp = self.session.post(self._url("customers"), json=payload)
         if not resp.ok:
             raise RuntimeError(f"Kimai create_customer failed {resp.status_code}: {resp.text}")
-        return resp.json()
+        created = resp.json()
+        self._customers.append(created)
+        return created
 
     def update_customer(self, kimai_id: int, name: str, notion_id: str, existing_comment: str | None = None) -> dict:
         payload = {
@@ -104,17 +120,16 @@ class KimaiClient:
         }
         resp = self.session.patch(self._url(f"customers/{kimai_id}"), json=payload)
         resp.raise_for_status()
-        return resp.json()
+        updated = resp.json()
+        self._customers = [updated if c["id"] == kimai_id else c for c in self._customers]
+        return updated
 
     # ------------------------------------------------------------------ #
     # Project (= Notion Project)                                           #
     # ------------------------------------------------------------------ #
 
-    def get_projects(self) -> list[dict]:
-        return self._get_all("projects")
-
     def find_project_by_notion_id(self, notion_id: str) -> dict | None:
-        for p in self.get_projects():
+        for p in self._projects:
             if _extract_notion_id(p.get("comment")) == notion_id:
                 return p
         return None
@@ -140,7 +155,9 @@ class KimaiClient:
             payload["end"] = end_date
         resp = self.session.post(self._url("projects"), json=payload)
         resp.raise_for_status()
-        return resp.json()
+        created = resp.json()
+        self._projects.append(created)
+        return created
 
     def update_project(
         self,
@@ -165,20 +182,16 @@ class KimaiClient:
             payload["end"] = end_date
         resp = self.session.patch(self._url(f"projects/{kimai_id}"), json=payload)
         resp.raise_for_status()
-        return resp.json()
+        updated = resp.json()
+        self._projects = [updated if p["id"] == kimai_id else p for p in self._projects]
+        return updated
 
     # ------------------------------------------------------------------ #
     # Activity (= Notion Task)                                             #
     # ------------------------------------------------------------------ #
 
-    def get_activities(self, project_id: int | None = None) -> list[dict]:
-        params: dict = {}
-        if project_id is not None:
-            params["project"] = project_id
-        return self._get_all("activities", params or None)
-
-    def find_activity_by_notion_id(self, notion_id: str, project_id: int | None = None) -> dict | None:
-        for a in self.get_activities(project_id=project_id):
+    def find_activity_by_notion_id(self, notion_id: str) -> dict | None:
+        for a in self._activities:
             if _extract_notion_id(a.get("comment")) == notion_id:
                 return a
         return None
@@ -192,7 +205,9 @@ class KimaiClient:
         }
         resp = self.session.post(self._url("activities"), json=payload)
         resp.raise_for_status()
-        return resp.json()
+        created = resp.json()
+        self._activities.append(created)
+        return created
 
     def update_activity(
         self,
@@ -209,7 +224,9 @@ class KimaiClient:
         }
         resp = self.session.patch(self._url(f"activities/{kimai_id}"), json=payload)
         resp.raise_for_status()
-        return resp.json()
+        updated = resp.json()
+        self._activities = [updated if a["id"] == kimai_id else a for a in self._activities]
+        return updated
 
 
 # ------------------------------------------------------------------ #
