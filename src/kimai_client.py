@@ -7,6 +7,13 @@ import requests
 # Delimiter used when embedding the Notion Page ID in Kimai's comment field.
 # Format: "...any human comment... [notion:PAGE-ID]"
 NOTION_ID_TAG = "[notion:{id}]"
+
+# Characters Kimai forbids in name fields
+_NAME_FORBIDDEN = str.maketrans({c: "" for c in '<>\\\"='})
+
+
+def _safe_name(name: str) -> str:
+    return name.translate(_NAME_FORBIDDEN).strip()
 NOTION_ID_PREFIX = "[notion:"
 NOTION_ID_SUFFIX = "]"
 
@@ -78,9 +85,12 @@ class KimaiClient:
 
     def create_customer(self, name: str, notion_id: str) -> dict:
         payload = {
-            "name": name,
+            "name": _safe_name(name),
             "comment": _embed_notion_id(None, notion_id),
             "visible": True,
+            "country": "US",
+            "currency": "USD",
+            "timezone": "America/New_York",
         }
         resp = self.session.post(self._url("customers"), json=payload)
         if not resp.ok:
@@ -89,7 +99,7 @@ class KimaiClient:
 
     def update_customer(self, kimai_id: int, name: str, notion_id: str, existing_comment: str | None = None) -> dict:
         payload = {
-            "name": name,
+            "name": _safe_name(name),
             "comment": _embed_notion_id(existing_comment, notion_id),
         }
         resp = self.session.patch(self._url(f"customers/{kimai_id}"), json=payload)
@@ -119,7 +129,7 @@ class KimaiClient:
         visible: bool = True,
     ) -> dict:
         payload = {
-            "name": name,
+            "name": _safe_name(name),
             "comment": _embed_notion_id(None, notion_id),
             "customer": customer_id,
             "visible": visible,
@@ -144,7 +154,7 @@ class KimaiClient:
         existing_comment: str | None = None,
     ) -> dict:
         payload = {
-            "name": name,
+            "name": _safe_name(name),
             "comment": _embed_notion_id(existing_comment, notion_id),
             "customer": customer_id,
             "visible": visible,
@@ -175,7 +185,7 @@ class KimaiClient:
 
     def create_activity(self, name: str, notion_id: str, project_id: int) -> dict:
         payload = {
-            "name": name,
+            "name": _safe_name(name),
             "comment": _embed_notion_id(None, notion_id),
             "project": project_id,
             "visible": True,
@@ -193,7 +203,7 @@ class KimaiClient:
         existing_comment: str | None = None,
     ) -> dict:
         payload = {
-            "name": name,
+            "name": _safe_name(name),
             "comment": _embed_notion_id(existing_comment, notion_id),
             "project": project_id,
         }
