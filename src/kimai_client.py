@@ -68,7 +68,7 @@ class KimaiClient:
     # ------------------------------------------------------------------ #
 
     def get_customers(self) -> list[dict]:
-        return self._get_all("customers", {"visible": "*"})
+        return self._get_all("customers")
 
     def find_customer_by_notion_id(self, notion_id: str) -> dict | None:
         for c in self.get_customers():
@@ -103,7 +103,7 @@ class KimaiClient:
     # ------------------------------------------------------------------ #
 
     def get_projects(self) -> list[dict]:
-        return self._get_all("projects", {"visible": "*"})
+        return self._get_all("projects")
 
     def find_project_by_notion_id(self, notion_id: str) -> dict | None:
         for p in self.get_projects():
@@ -164,10 +164,10 @@ class KimaiClient:
     # ------------------------------------------------------------------ #
 
     def get_activities(self, project_id: int | None = None) -> list[dict]:
-        params: dict = {"visible": "*"}
+        params: dict = {}
         if project_id is not None:
             params["project"] = project_id
-        return self._get_all("activities", params)
+        return self._get_all("activities", params or None)
 
     def find_activity_by_notion_id(self, notion_id: str, project_id: int | None = None) -> dict | None:
         for a in self.get_activities(project_id=project_id):
