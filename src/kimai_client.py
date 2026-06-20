@@ -83,7 +83,8 @@ class KimaiClient:
             "visible": True,
         }
         resp = self.session.post(self._url("customers"), json=payload)
-        resp.raise_for_status()
+        if not resp.ok:
+            raise RuntimeError(f"Kimai create_customer failed {resp.status_code}: {resp.text}")
         return resp.json()
 
     def update_customer(self, kimai_id: int, name: str, notion_id: str, existing_comment: str | None = None) -> dict:
