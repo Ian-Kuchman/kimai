@@ -67,9 +67,9 @@ class KimaiClient:
             if delay:
                 time.sleep(delay)
             try:
-                resp = self.session.request(method, url, **kwargs)
+                resp = self.session.request(method, url, timeout=30, **kwargs)
                 return resp
-            except requests.exceptions.ConnectionError as e:
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
                 last_exc = e
                 if attempt < len(delays):
                     import logging
