@@ -81,9 +81,6 @@ class KimaiClient:
             "name": name,
             "comment": _embed_notion_id(None, notion_id),
             "visible": True,
-            "currency": "USD",
-            "country": "US",
-            "timezone": "America/New_York",
         }
         resp = self.session.post(self._url("customers"), json=payload)
         resp.raise_for_status()
