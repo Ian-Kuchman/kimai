@@ -1,6 +1,7 @@
 """Kimai REST API client — manages Customers, Projects, and Activities."""
 
 import os
+import time
 import requests
 
 
@@ -57,13 +58,34 @@ class KimaiClient:
     def _url(self, path: str) -> str:
         return f"{self.base_url}/api/{path.lstrip('/')}"
 
+    def _request(self, method: str, path: str, **kwargs) -> requests.Response:
+        """Make a request with exponential backoff retry on connection errors."""
+        url = self._url(path)
+        delays = [2, 4, 8, 16]
+        last_exc: Exception | None = None
+        for attempt, delay in enumerate([0] + delays):
+            if delay:
+                time.sleep(delay)
+            try:
+                resp = self.session.request(method, url, **kwargs)
+                return resp
+            except requests.exceptions.ConnectionError as e:
+                last_exc = e
+                if attempt < len(delays):
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "Connection error on %s %s (attempt %d), retrying in %ds: %s",
+                        method, path, attempt + 1, delays[attempt] if attempt < len(delays) else 0, e,
+                    )
+        raise last_exc  # type: ignore[misc]
+
     def _get_all(self, path: str, params: dict | None = None) -> list[dict]:
         """Fetch all pages of a paginated Kimai list endpoint."""
         results = []
         page = 1
         while True:
             p = {"page": page, "size": 250, **(params or {})}
-            resp = self.session.get(self._url(path), params=p)
+            resp = self._request("GET", path, params=p)
             resp.raise_for_status()
             data = resp.json()
             if not data:
@@ -106,7 +128,7 @@ class KimaiClient:
             "currency": "USD",
             "timezone": "America/New_York",
         }
-        resp = self.session.post(self._url("customers"), json=payload)
+        resp = self._request("POST", "customers", json=payload)
         if not resp.ok:
             raise RuntimeError(f"Kimai create_customer failed {resp.status_code}: {resp.text}")
         created = resp.json()
@@ -118,7 +140,7 @@ class KimaiClient:
             "name": _safe_name(name),
             "comment": _embed_notion_id(existing_comment, notion_id),
         }
-        resp = self.session.patch(self._url(f"customers/{kimai_id}"), json=payload)
+        resp = self._request("PATCH", f"customers/{kimai_id}", json=payload)
         resp.raise_for_status()
         updated = resp.json()
         self._customers = [updated if c["id"] == kimai_id else c for c in self._customers]
@@ -153,7 +175,7 @@ class KimaiClient:
             payload["start"] = start_date
         if end_date:
             payload["end"] = end_date
-        resp = self.session.post(self._url("projects"), json=payload)
+        resp = self._request("POST", "projects", json=payload)
         resp.raise_for_status()
         created = resp.json()
         self._projects.append(created)
@@ -180,7 +202,7 @@ class KimaiClient:
             payload["start"] = start_date
         if end_date:
             payload["end"] = end_date
-        resp = self.session.patch(self._url(f"projects/{kimai_id}"), json=payload)
+        resp = self._request("PATCH", f"projects/{kimai_id}", json=payload)
         resp.raise_for_status()
         updated = resp.json()
         self._projects = [updated if p["id"] == kimai_id else p for p in self._projects]
@@ -203,7 +225,7 @@ class KimaiClient:
             "project": project_id,
             "visible": True,
         }
-        resp = self.session.post(self._url("activities"), json=payload)
+        resp = self._request("POST", "activities", json=payload)
         resp.raise_for_status()
         created = resp.json()
         self._activities.append(created)
@@ -222,7 +244,7 @@ class KimaiClient:
             "comment": _embed_notion_id(existing_comment, notion_id),
             "project": project_id,
         }
-        resp = self.session.patch(self._url(f"activities/{kimai_id}"), json=payload)
+        resp = self._request("PATCH", f"activities/{kimai_id}", json=payload)
         resp.raise_for_status()
         updated = resp.json()
         self._activities = [updated if a["id"] == kimai_id else a for a in self._activities]
